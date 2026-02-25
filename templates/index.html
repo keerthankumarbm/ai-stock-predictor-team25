@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Stock Predictor</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+<div class="top-bar">
+    <button class="logout-btn" onclick="logout()">Logout</button>
+</div>
+<div class="container"> 
+
+    <div class="welcome-box">
+        <h2 id="welcomeText">Welcome</h2>
+        <p id="marketStatus"></p>
+    </div>
+
+    <h1>📈 AI Stock Price Predictor</h1>
+
+    <div class="input-group">
+        <select id="stock">
+            <option value="TCS.NS">TCS</option>
+            <option value="INFY.NS">INFY</option>
+            <option value="RELIANCE.NS">RELIANCE</option>
+            <option value="HDFCBANK.NS">HDFC BANK</option>
+            <option value="ICICIBANK.NS">ICICI BANK</option>
+            <option value="LT.NS">L&T</option>
+            <option value="SBIN.NS">SBI</option>
+            <option value="ITC.NS">ITC</option>
+        </select>
+
+        <button onclick="predictStock()">Predict</button>
+    </div>
+
+    <div class="result-card">
+        <h2>Prediction Result</h2>
+        <div class="price" id="price">₹ --</div>
+        <div id="adviceText">AI Suggestion: --</div>
+        <div id="trendBox" class="trend neutral">Waiting for prediction...</div>
+    </div>
+
+    <div class="chart-box">
+        <canvas id="stockChart"></canvas>
+    </div>
+
+    <h3>Recent Searches</h3>
+    <div id="history"></div>
+    <h3>Share Feedback</h3>
+
+<div class="feedback-box">
+    <textarea id="feedbackText" placeholder="Tell us about your experience..."></textarea>
+    <button onclick="sendFeedback()">Submit Feedback</button>
+</div>
+</div>
+
+
+<script>
+let chart = null;
+
+// ---------- Greeting ----------
+window.onload = function(){
+    const username = "{{ username }}";
+    const hour = new Date().getHours();
+
+    let greeting = "";
+    let market = "";
+
+    if(hour < 12){
+        greeting = "🌅 Good Morning";
+        market = "Market opens with new opportunities!";
+    }
+    else if(hour < 17){
+        greeting = "☀ Good Afternoon";
+        market = "Trading hours — stay sharp!";
+    }
+    else if(hour < 21){
+        greeting = "🌆 Good Evening";
+        market = "Market closed — time to analyze.";
+    }
+    else{
+        greeting = "🌙 Good Night";
+        market = "Plan tomorrow’s trades wisely.";
+    }
+
+    document.getElementById("welcomeText").innerText = `${greeting}, ${username}!`;
+    document.getElementById("marketStatus").innerText = market;
+
+    loadHistory();
+};
+
+
+// ---------- Predict ----------
+async function predictStock(){
+
+    const stock = document.getElementById("stock").value;
+
+    const res = await fetch(`/predict?stock=${stock}`);
+    const data = await res.json();
+
+    if(data.error){
+        alert(data.error);
+        return;
+    }
+
+    // Price
+    document.getElementById("price").innerText = "₹ " + data.predicted_price;
+
+    // Advice
+    let adviceText = document.getElementById("adviceText");
+
+    if(data.advice === "BUY"){
+        adviceText.innerHTML = "🟢 AI Suggestion: BUY";
+        adviceText.style.color = "#22c55e";
+    }
+    else if(data.advice === "SELL"){
+        adviceText.innerHTML = "🔴 AI Suggestion: SELL";
+        adviceText.style.color = "#ef4444";
+    }
+    else{
+        adviceText.innerHTML = "🟡 AI Suggestion: HOLD";
+        adviceText.style.color = "#facc15";
+    }
+
+    // Trend
+    let trendBox = document.getElementById("trendBox");
+
+    if(data.signal === "UP"){
+        trendBox.className = "trend up";
+        trendBox.innerHTML =
+        `📈 Bullish Signal <br>
+         Current: ₹${data.current_price} → Predicted: ₹${data.predicted_price}
+         <br> +${data.percent}% expected rise`;
+    }
+    else{
+        trendBox.className = "trend down";
+        trendBox.innerHTML =
+        `📉 Bearish Signal <br>
+         Current: ₹${data.current_price} → Predicted: ₹${data.predicted_price}
+         <br> ${data.percent}% expected fall`;
+    }
+
+    loadGraph(stock);
+    loadHistory();
+}
+
+
+// ---------- Graph ----------
+async function loadGraph(stock){
+
+    const res = await fetch(`/history?stock=${stock}`);
+    const data = await res.json();
+
+    if(data.error){
+        alert(data.error);
+        return;
+    }
+
+    const ctx = document.getElementById("stockChart").getContext("2d");
+
+    if(chart){
+        chart.destroy();
+    }
+
+    chart = new Chart(ctx,{
+        type:'line',
+        data:{
+            labels:data.dates,
+            datasets:[{
+                label:'Closing Price',
+                data:data.prices,
+                borderColor:'#22c55e',
+                backgroundColor:'rgba(34,197,94,0.15)',
+                tension:0.3,
+                fill:true
+            }]
+        }
+    });
+}
+
+
+// ---------- History ----------
+async function loadHistory(){
+
+    const res = await fetch("/user_history");
+    const data = await res.json();
+
+    let html = "";
+
+    data.forEach(row=>{
+        html += `<div class="history-card">
+                    <span>${row.stock}</span>
+                    <span>₹ ${row.price}</span>
+                    <span class="time">${row.time}</span>
+                </div>`;
+    });
+
+    document.getElementById("history").innerHTML = html;
+}
+</script>
+
+<script>
+function logout(){
+    window.location.href = "/logout";
+}
+</script>
+<script>
+async function sendFeedback(){
+
+    let message = document.getElementById("feedbackText").value;
+
+    if(message.trim() === ""){
+        alert("Please enter feedback");
+        return;
+    }
+
+    const res = await fetch("/feedback", {
+        method: "POST",
+        headers: {"Content-Type":"application/x-www-form-urlencoded"},
+        body: "message=" + encodeURIComponent(message)
+    });
+
+    const data = await res.json();
+
+    if(data.success){
+        alert("Thanks! Feedback submitted 💚");
+        document.getElementById("feedbackText").value="";
+    }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+/* ===== GLOBAL ===== */
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body{
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    /* STOCK MARKET BACKGROUND */
+    background:
+        linear-gradient(rgba(8,15,35,0.85), rgba(8,15,35,0.95)),
+        url("https://images.unsplash.com/photo-1642790106117-e829e14a795f");
+    background-size:cover;
+    background-position:center;
+}
+
+/* ===== GLASS CARD ===== */
+.auth-card{
+    width:380px;
+    padding:40px 35px;
+    border-radius:18px;
+
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(14px);
+    border:1px solid rgba(255,255,255,0.1);
+    box-shadow:0 10px 40px rgba(0,0,0,0.6);
+
+    color:white;
+}
+
+.auth-card h1{
+    text-align:center;
+    margin-bottom:25px;
+    font-weight:600;
+    color:#4ade80;
+}
+
+/* ===== INPUTS ===== */
+.input-group{
+    margin-bottom:18px;
+    position:relative;
+}
+
+.input-group input{
+    width:100%;
+    padding:12px 40px 12px 12px;
+    border-radius:10px;
+    border:none;
+    outline:none;
+
+    background:rgba(255,255,255,0.08);
+    color:white;
+    font-size:15px;
+}
+
+.input-group input::placeholder{
+    color:#aaa;
+}
+
+/* ===== EYE ICON ===== */
+.toggle-password{
+    position:absolute;
+    right:12px;
+    top:50%;
+    transform:translateY(-50%);
+    cursor:pointer;
+    color:#bbb;
+}
+
+/* ===== BUTTON ===== */
+button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    font-weight:600;
+
+    background:linear-gradient(135deg,#22c55e,#4ade80);
+    color:black;
+    cursor:pointer;
+    transition:0.3s;
+}
+
+button:hover{
+    transform:scale(1.04);
+    box-shadow:0 0 20px #22c55e;
+}
+
+/* ===== LINKS ===== */
+.auth-link{
+    text-align:center;
+    margin-top:15px;
+}
+
+.auth-link a{
+    color:#4ade80;
+    text-decoration:none;
+}
+
+.error{
+    color:#ff6b6b;
+    text-align:center;
+    margin-bottom:10px;
+}
