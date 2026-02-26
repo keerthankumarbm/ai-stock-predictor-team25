@@ -91,10 +91,14 @@ def predict():
     if "username" not in session:
         return jsonify({"error": "Not logged in"})
 
-    stock = request.args.get("stock")
+    stock = request.args.get("stock").upper()
+
+        # Auto-append .NS if missing
+    if "." not in stock:
+        stock = stock + ".NS"
 
     try:
-        data = yf.download(stock, period="3mo")
+        data = yf.download(stock, period="3mo", progress=False, threads=False)
 
         if data.empty:
             return jsonify({"error": "No stock data"})
