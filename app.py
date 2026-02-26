@@ -8,7 +8,8 @@ from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import os
 import gdown
-import pandas as pd
+import pandas as pd 
+import requests
 
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
@@ -87,14 +88,25 @@ def logout():
 
 # ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
 def safe_download(stock):
-    try:
-        ticker = yf.Ticker(stock)
-        data = ticker.history(period="3mo")
-        return data
-    except Exception as e:
-        print("Download error:", e)
+    api_key = os.environ.get("ALPHA_VANTAGE_KEY")
+    symbol = stock.replace(".NS", "")
+
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}.BSE&outputsize=compact&apikey={api_key}"
+
+    response = requests.get(url)
+    data = response.json()
+
+    if "Time Series (Daily)" not in data:
         return pd.DataFrame()
 
+    time_series = data["Time Series (Daily)"]
+
+    df = pd.DataFrame.from_dict(time_series, orient="index")
+    df = df.astype(float)
+    df = df.sort_index()
+    df.rename(columns={"4. close": "Close"}, inplace=True)
+
+    return df
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
 def predict():
