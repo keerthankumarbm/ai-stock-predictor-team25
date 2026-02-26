@@ -1,33 +1,22 @@
 import yfinance as yf
 import pandas as pd
 
-stocks = [
-    "TCS.NS",
-    "RELIANCE.NS",
-    "HDFCBANK.NS",
-    "IDFCFIRSTB.NS",
-    "INFY.NS",
-    "SBIN.NS",
-    "LT.NS",
-    "ITC.NS"
-]
+stock = "TCS.NS"
 
-all_data = []
+# IMPORTANT: auto_adjust=False + group_by='column'
+data = yf.download(
+    stock,
+    start="2019-01-01",
+    end="2024-12-31",
+    auto_adjust=False,
+    group_by='column'
+)
 
-for stock in stocks:
-    print("Downloading:", stock)
-    df = yf.download(stock, period="5y", progress=False)
+# Reset index so Date becomes column
+data.reset_index(inplace=True)
 
-    df.reset_index(inplace=True)
+# Save clean CSV
+data.to_csv("stock_data.csv", index=False)
 
-    df["Symbol"] = stock.replace(".NS", "")
-
-    df = df[["Date", "Symbol", "Open", "High", "Low", "Close", "Volume"]]
-
-    all_data.append(df)
-
-final_df = pd.concat(all_data, ignore_index=True)
-
-final_df.to_csv("stock_data.csv", index=False)
-
-print("Dataset created successfully!")
+print("Clean data saved!")
+print(data.head())
