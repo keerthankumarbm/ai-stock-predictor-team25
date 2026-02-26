@@ -74,10 +74,18 @@ def get_stock_data(stock_symbol):
     try:
         df = pd.read_csv("stock_data.csv")
 
-        # Filter exact symbol match
-        df = df[df["Symbol"] == stock_symbol]
+        # Clean spaces
+        df.columns = df.columns.str.strip()
+        df["Symbol"] = df["Symbol"].astype(str).str.strip()
+
+        # Remove .NS from both sides for safe comparison
+        stock_clean = stock_symbol.replace(".NS", "").strip()
+        df["Symbol_clean"] = df["Symbol"].str.replace(".NS", "", regex=False)
+
+        df = df[df["Symbol_clean"] == stock_clean]
 
         if df.empty:
+            print("Available symbols in CSV:", df["Symbol"].unique())
             return pd.DataFrame()
 
         df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
