@@ -117,6 +117,7 @@ def predict():
         return jsonify({"error": "Not logged in"})
 
     stock = request.args.get("stock", "").upper().strip()
+    print("Received stock:", stock)
     try:
         data = safe_download(stock)
 
