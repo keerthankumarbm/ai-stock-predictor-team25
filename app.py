@@ -87,7 +87,6 @@ def logout():
 
 # ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
 import requests
-
 def safe_download(stock):
     api_key = os.environ.get("TWELVE_API_KEY")
 
@@ -95,11 +94,14 @@ def safe_download(stock):
 
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}:NSE&interval=1day&outputsize=90&apikey={api_key}"
 
+    print("Calling URL:", url)  # ADD THIS
+
     response = requests.get(url)
     data = response.json()
 
+    print("API RESPONSE:", data)  # ADD THIS
+
     if "values" not in data:
-        print("TwelveData error:", data)
         return pd.DataFrame()
 
     df = pd.DataFrame(data["values"])
@@ -109,6 +111,7 @@ def safe_download(stock):
     df.rename(columns={"close": "Close"}, inplace=True)
 
     return df[["Close"]]
+
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
 def predict():
