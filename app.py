@@ -8,6 +8,7 @@ from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import os
 import gdown
+import pandas as pd
 
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
@@ -39,7 +40,6 @@ def register():
         username = request.form['username']
         password = request.form['password']
 
-        # Check if user already exists
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             return render_template('register.html', error="Username already exists!")
@@ -85,28 +85,41 @@ def logout():
     session.clear()
     return render_template("logout.html", username=username)
 
+# ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
+def safe_download(stock):
+    try:
+        ticker = yf.Ticker(stock)
+        data = ticker.history(period="3mo")
+        return data
+    except Exception as e:
+        print("Download error:", e)
+        return pd.DataFrame()
+
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
 def predict():
     if "username" not in session:
         return jsonify({"error": "Not logged in"})
 
-    stock = request.args.get("stock").upper()
+    stock = request.args.get("stock", "").upper().strip()
 
-        # Auto-append .NS if missing
+    # Auto append .NS
     if "." not in stock:
         stock = stock + ".NS"
 
     try:
-        data = yf.download(stock, period="3mo", progress=False, threads=False)
+        data = safe_download(stock)
 
         if data.empty:
-            return jsonify({"error": "No stock data"})
+            return jsonify({"error": f"No stock data for {stock}"})
 
         close_data = data[['Close']].values
 
         scaler = MinMaxScaler(feature_range=(0, 1))
         scaled_data = scaler.fit_transform(close_data)
+
+        if len(scaled_data) < 60:
+            return jsonify({"error": "Not enough data for prediction"})
 
         last_60 = scaled_data[-60:]
         X_test = np.reshape(last_60, (1, 60, 1))
@@ -114,7 +127,7 @@ def predict():
         prediction = model.predict(X_test, verbose=0)
         predicted_price = float(scaler.inverse_transform(prediction)[0][0])
 
-        # Save search to DB
+        # Save to DB
         new_search = Search(
             username=session["username"],
             stock=stock,
@@ -168,20 +181,6 @@ def user_history():
         })
 
     return jsonify(history)
-
-# ---------------- FEEDBACK ----------------
-@app.route("/feedback", methods=["POST"])
-def feedback():
-    if "username" not in session:
-        return jsonify({"success": False})
-
-    message = request.form.get("message")
-    username = session["username"]
-
-    with open("user_feedback.txt", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()} | {username} | {message}\n")
-
-    return jsonify({"success": True})
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
