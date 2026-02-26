@@ -1,14 +1,12 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from database import db, init_app, User, Search
 from werkzeug.security import generate_password_hash, check_password_hash
-import yfinance as yf
 import numpy as np
 from datetime import datetime
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
+import pandas as pd
 import os
-import gdown
-import pandas as pd 
 
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
@@ -19,13 +17,7 @@ init_app(app)
 with app.app_context():
     db.create_all()
 
-# ---------------- MODEL DOWNLOAD ----------------
-MODEL_URL = "https://drive.google.com/uc?id=1LMg8_eMwaes1MmOxA2IW0XcTzC6_LWFq"
-
-if not os.path.exists("stock_model.h5"):
-    print("Downloading ML model...")
-    gdown.download(MODEL_URL, "stock_model.h5", quiet=False)
-
+# ---------------- LOAD MODEL ----------------
 model = load_model("stock_model.h5")
 
 # ---------------- HOME ----------------
@@ -78,39 +70,28 @@ def dashboard():
         return redirect(url_for("login"))
     return render_template("index.html", username=session["username"])
 
-# ---------------- LOGOUT ----------------
-@app.route("/logout")
-def logout():
-    username = session.get("username", "User")
-    session.clear()
-    return render_template("logout.html", username=username)
-
-# ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
-import requests
+# ---------------- SAFE CSV LOAD ----------------
 def safe_download(stock):
-    api_key = os.environ.get("TWELVE_API_KEY")
+    try:
+        df = pd.read_csv("stock_data.csv")
 
-    symbol = stock.upper().strip()
+        # Filter selected stock
+        df = df[df["Symbol"] == stock]
 
-    url = f"https://api.twelvedata.com/time_series?symbol={symbol}:NSE&interval=1day&outputsize=90&apikey={api_key}"
+        if df.empty:
+            return pd.DataFrame()
 
-    print("Calling URL:", url)  # ADD THIS
+        df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+        df = df.dropna(subset=["Close"])
 
-    response = requests.get(url)
-    data = response.json()
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date")
 
-    print("API RESPONSE:", data)  # ADD THIS
+        return df[["Close"]]
 
-    if "values" not in data:
+    except Exception as e:
+        print("CSV Error:", e)
         return pd.DataFrame()
-
-    df = pd.DataFrame(data["values"])
-    df["close"] = df["close"].astype(float)
-    df = df.sort_values("datetime")
-
-    df.rename(columns={"close": "Close"}, inplace=True)
-
-    return df[["Close"]]
 
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
@@ -119,7 +100,7 @@ def predict():
         return jsonify({"error": "Not logged in"})
 
     stock = request.args.get("stock", "").upper().strip()
-    print("Received stock:", stock)
+
     try:
         data = safe_download(stock)
 
