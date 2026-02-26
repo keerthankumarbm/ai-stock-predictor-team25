@@ -9,7 +9,6 @@ from sklearn.preprocessing import MinMaxScaler
 import os
 import gdown
 import pandas as pd 
-import requests
 
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
@@ -88,8 +87,11 @@ def logout():
 
 # ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
 def safe_download(stock):
+    import requests
     api_key = os.environ.get("ALPHA_VANTAGE_KEY")
-    symbol = stock.replace(".NS", "")
+
+    # Always clean symbol first
+    symbol = stock.upper().replace(".NS", "").replace(".BSE", "")
 
     url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}.BSE&outputsize=compact&apikey={api_key}"
 
@@ -97,6 +99,7 @@ def safe_download(stock):
     data = response.json()
 
     if "Time Series (Daily)" not in data:
+        print("Alpha response:", data)
         return pd.DataFrame()
 
     time_series = data["Time Series (Daily)"]
@@ -114,11 +117,6 @@ def predict():
         return jsonify({"error": "Not logged in"})
 
     stock = request.args.get("stock", "").upper().strip()
-
-    # Auto append .NS
-    if "." not in stock:
-        stock = stock + ".NS"
-
     try:
         data = safe_download(stock)
 
