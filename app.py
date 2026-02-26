@@ -86,30 +86,27 @@ def logout():
     return render_template("logout.html", username=username)
 
 # ---------------- SAFE STOCK DOWNLOAD FUNCTION ----------------
+import requests
+
 def safe_download(stock):
-    import requests
-    api_key = os.environ.get("ALPHA_VANTAGE_KEY")
+    api_key = os.environ.get("TWELVE_API_KEY")
 
-    # Always clean symbol first
-    symbol = stock.upper().replace(".NS", "").replace(".BSE", "")
-
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}.BSE&outputsize=compact&apikey={api_key}"
+    url = f"https://api.twelvedata.com/time_series?symbol={stock}&interval=1day&exchange=NSE&outputsize=90&apikey={api_key}"
 
     response = requests.get(url)
     data = response.json()
 
-    if "Time Series (Daily)" not in data:
-        print("Alpha response:", data)
+    if "values" not in data:
+        print("TwelveData error:", data)
         return pd.DataFrame()
 
-    time_series = data["Time Series (Daily)"]
+    df = pd.DataFrame(data["values"])
+    df["close"] = df["close"].astype(float)
+    df = df.sort_values("datetime")
 
-    df = pd.DataFrame.from_dict(time_series, orient="index")
-    df = df.astype(float)
-    df = df.sort_index()
-    df.rename(columns={"4. close": "Close"}, inplace=True)
+    df.rename(columns={"close": "Close"}, inplace=True)
 
-    return df
+    return df[["Close"]]
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
 def predict():
