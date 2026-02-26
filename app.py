@@ -70,23 +70,11 @@ def dashboard():
     return render_template("index.html", username=session["username"])
 
 # ---------------- CSV LOAD FUNCTION ----------------
-def get_stock_data(stock_symbol):
+def get_stock_data():
     try:
         df = pd.read_csv("stock_data.csv")
 
-        # Clean spaces
         df.columns = df.columns.str.strip()
-        df["Symbol"] = df["Symbol"].astype(str).str.strip()
-
-        # Remove .NS from both sides for safe comparison
-        stock_clean = stock_symbol.replace(".NS", "").strip()
-        df["Symbol_clean"] = df["Symbol"].str.replace(".NS", "", regex=False)
-
-        df = df[df["Symbol_clean"] == stock_clean]
-
-        if df.empty:
-            print("Available symbols in CSV:", df["Symbol"].unique())
-            return pd.DataFrame()
 
         df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -106,13 +94,11 @@ def predict():
     if "username" not in session:
         return jsonify({"error": "Not logged in"})
 
-    stock = request.args.get("stock", "").strip()
-
     try:
-        data = get_stock_data(stock)
+        data = get_stock_data()
 
         if data.empty:
-            return jsonify({"error": f"No stock data for {stock}"})
+            return jsonify({"error": "No stock data available"})
 
         close_data = data[['Close']].values
 
@@ -141,17 +127,8 @@ def predict():
         else:
             advice = "HOLD"
 
-        # Save search
-        new_search = Search(
-            username=session["username"],
-            stock=stock,
-            price=round(predicted_price, 2)
-        )
-        db.session.add(new_search)
-        db.session.commit()
-
         return jsonify({
-            "stock": stock,
+            "stock": "TCS.NS",
             "predicted_price": round(predicted_price, 2),
             "current_price": round(current_price, 2),
             "percent": round(percent, 2),
@@ -161,6 +138,7 @@ def predict():
 
     except Exception as e:
         return jsonify({"error": str(e)})
+
 
 # ---------------- HISTORY FOR GRAPH ----------------
 @app.route("/history")

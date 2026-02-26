@@ -96,7 +96,7 @@ async function predictStock(){
 
     const stock = document.getElementById("stock").value;
 
-    const res = await fetch(`/predict?stock=${stock}`);
+    const res = await fetch(`/predict`);
     const data = await res.json();
 
     if(data.error){
