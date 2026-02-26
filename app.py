@@ -69,25 +69,27 @@ def dashboard():
         return redirect(url_for("login"))
     return render_template("index.html", username=session["username"])
 
-# ---------------- CSV DATA LOAD ----------------
-def safe_download(stock):
+# ---------------- CSV LOAD FUNCTION ----------------
+def get_stock_data(stock_symbol):
     try:
         df = pd.read_csv("stock_data.csv")
-        df = df[df["Symbol"] == stock]
+
+        # Filter exact symbol match
+        df = df[df["Symbol"] == stock_symbol]
 
         if df.empty:
             return pd.DataFrame()
 
         df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-        df = df.dropna(subset=["Close"])
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.dropna(subset=["Close", "Date"])
         df = df.sort_values("Date")
 
-        return df[["Close"]]
+        return df
 
     except Exception as e:
-        print("CSV Error:", e)
+        print("CSV ERROR:", e)
         return pd.DataFrame()
 
 # ---------------- PREDICTION ----------------
@@ -96,35 +98,27 @@ def predict():
     if "username" not in session:
         return jsonify({"error": "Not logged in"})
 
-    stock = request.args.get("stock", "").upper().strip()
+    stock = request.args.get("stock", "").strip()
 
     try:
-        data = safe_download(stock)
+        data = get_stock_data(stock)
 
         if data.empty:
             return jsonify({"error": f"No stock data for {stock}"})
 
         close_data = data[['Close']].values
 
+        if len(close_data) < 60:
+            return jsonify({"error": "Not enough data for prediction"})
+
         scaler = MinMaxScaler(feature_range=(0, 1))
         scaled_data = scaler.fit_transform(close_data)
-
-        if len(scaled_data) < 60:
-            return jsonify({"error": "Not enough data for prediction"})
 
         last_60 = scaled_data[-60:]
         X_test = np.reshape(last_60, (1, 60, 1))
 
         prediction = model.predict(X_test, verbose=0)
         predicted_price = float(scaler.inverse_transform(prediction)[0][0])
-
-        new_search = Search(
-            username=session["username"],
-            stock=stock,
-            price=predicted_price
-        )
-        db.session.add(new_search)
-        db.session.commit()
 
         current_price = float(data['Close'].iloc[-1])
         change = predicted_price - current_price
@@ -139,11 +133,19 @@ def predict():
         else:
             advice = "HOLD"
 
+        # Save search
+        new_search = Search(
+            username=session["username"],
+            stock=stock,
+            price=round(predicted_price, 2)
+        )
+        db.session.add(new_search)
+        db.session.commit()
+
         return jsonify({
             "stock": stock,
             "predicted_price": round(predicted_price, 2),
             "current_price": round(current_price, 2),
-            "change": round(change, 2),
             "percent": round(percent, 2),
             "signal": signal,
             "advice": advice
@@ -151,6 +153,23 @@ def predict():
 
     except Exception as e:
         return jsonify({"error": str(e)})
+
+# ---------------- HISTORY FOR GRAPH ----------------
+@app.route("/history")
+def history():
+    stock = request.args.get("stock", "").strip()
+    data = get_stock_data(stock)
+
+    if data.empty:
+        return jsonify({"error": f"No history for {stock}"})
+
+    dates = data["Date"].dt.strftime("%Y-%m-%d").tolist()
+    prices = data["Close"].tolist()
+
+    return jsonify({
+        "dates": dates[-60:],
+        "prices": prices[-60:]
+    })
 
 # ---------------- USER HISTORY ----------------
 @app.route("/user_history")
