@@ -91,7 +91,9 @@ import requests
 def safe_download(stock):
     api_key = os.environ.get("TWELVE_API_KEY")
 
-    url = f"https://api.twelvedata.com/time_series?symbol={stock}&interval=1day&exchange=NSE&outputsize=90&apikey={api_key}"
+    symbol = stock.upper().strip()
+
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}:NSE&interval=1day&outputsize=90&apikey={api_key}"
 
     response = requests.get(url)
     data = response.json()
