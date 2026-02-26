@@ -2,19 +2,13 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from database import db, init_app, User, Search
 from werkzeug.security import generate_password_hash, check_password_hash
 import yfinance as yf
-import numpy as np 
+import numpy as np
 from datetime import datetime
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import os
 import gdown
-MODEL_URL = "https://drive.google.com/uc?id=1LMg8_eMwaes1MmOxA2IW0XcTzC6_LWFq"
 
-if not os.path.exists("stock_model.h5"):
-    print("Downloading ML model...")
-    gdown.download(MODEL_URL, "stock_model.h5", quiet=False)
-
-model = load_model("stock_model.h5")
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret")
@@ -24,22 +18,45 @@ init_app(app)
 with app.app_context():
     db.create_all()
 
-init_db()
+# ---------------- MODEL DOWNLOAD ----------------
+MODEL_URL = "https://drive.google.com/uc?id=1LMg8_eMwaes1MmOxA2IW0XcTzC6_LWFq"
 
-# Load ML model once
+if not os.path.exists("stock_model.h5"):
+    print("Downloading ML model...")
+    gdown.download(MODEL_URL, "stock_model.h5", quiet=False)
+
 model = load_model("stock_model.h5")
-
 
 # ---------------- HOME ----------------
 @app.route("/")
 def home():
     return redirect(url_for("login"))
 
+# ---------------- REGISTER ----------------
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return render_template('register.html', error="Username already exists!")
+
+        hashed_password = generate_password_hash(password)
+        new_user = User(username=username, password=hashed_password)
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
 
 # ---------------- LOGIN ----------------
-@app.route('/login', methods=['GET','POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -47,42 +64,18 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password_hash(user.password, password):
-            if user:
-                session['username'] = username
-                return redirect(url_for('dashboard'))
-            else:
-                return render_template('login.html', error="Invalid Username or Password")
+            session['username'] = username
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error="Invalid Username or Password")
 
     return render_template('login.html')
-
-
-# ---------------- REGISTER ----------------
-@app.route('/register', methods=['GET','POST'])
-def register():
-
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-
-        hashed = generate_password_hash(password)
-        new_user = User(username=username, password=hashed)
-        db.session.add(new_user)
-        db.session.commit()
-
-        if success:
-            return redirect(url_for('login'))
-        else:
-            return render_template('register.html', error="Username already exists!")
-
-    return render_template('register.html')
-
 
 # ---------------- DASHBOARD ----------------
 @app.route("/dashboard")
 def dashboard():
     if "username" not in session:
         return redirect(url_for("login"))
-
     return render_template("index.html", username=session["username"])
 
 # ---------------- LOGOUT ----------------
@@ -91,7 +84,6 @@ def logout():
     username = session.get("username", "User")
     session.clear()
     return render_template("logout.html", username=username)
-
 
 # ---------------- PREDICTION ----------------
 @app.route("/predict")
@@ -115,28 +107,24 @@ def predict():
         last_60 = scaled_data[-60:]
         X_test = np.reshape(last_60, (1, 60, 1))
 
-        prediction = model.predict(X_test)
+        prediction = model.predict(X_test, verbose=0)
         predicted_price = float(scaler.inverse_transform(prediction)[0][0])
 
-        # save history with logged user
+        # Save search to DB
         new_search = Search(
-        username=session["username"],
-        stock=stock,
-        price=predicted_price
+            username=session["username"],
+            stock=stock,
+            price=predicted_price
         )
         db.session.add(new_search)
         db.session.commit()
 
         current_price = float(data['Close'].iloc[-1])
-
         change = predicted_price - current_price
         percent = (change / current_price) * 100
-        if change > 0:
-            signal = "UP"
-        else:
-            signal = "DOWN"
 
-        # ---------- AI ADVICE ----------
+        signal = "UP" if change > 0 else "DOWN"
+
         if percent > 2:
             advice = "BUY"
         elif percent < -2:
@@ -157,59 +145,22 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-@app.route("/history")
-def history():
-    if "username" not in session:
-        return jsonify({"error": "Not logged in"})
-
-    stock = request.args.get("stock")
-
-    try:
-        data = yf.download(stock, period="3mo")
-
-        if data.empty:
-            return jsonify({"error": "No stock data"})
-
-        data.reset_index(inplace=True)
-
-        # ---- CRITICAL FIX ----
-        close_series = data["Close"]
-
-        # If dataframe (multi-index) → take first column
-        if hasattr(close_series, "columns"):
-            close_series = close_series.iloc[:,0]
-
-        dates = data["Date"].dt.strftime("%Y-%m-%d").tolist()
-        prices = close_series.astype(float).tolist()
-
-        return jsonify({
-            "dates": dates,
-            "prices": prices
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
+# ---------------- USER HISTORY ----------------
 @app.route("/user_history")
 def user_history():
-
-    print("SESSION:", session)
-
     if "username" not in session:
-        print("NO USER IN SESSION")
         return jsonify([])
 
     rows = Search.query.filter_by(
-    username=session["username"]
+        username=session["username"]
     ).order_by(Search.id.desc()).limit(5).all()
-    print("DB ROWS:", rows)
 
     history = []
     for r in rows:
         history.append({
-            "stock": r[0],
-            "price": r[1],
-            "time": r[2]
+            "stock": r.stock,
+            "price": r.price,
+            "time": r.time.strftime("%Y-%m-%d %H:%M:%S")
         })
 
     return jsonify(history)
@@ -223,7 +174,6 @@ def feedback():
     message = request.form.get("message")
     username = session["username"]
 
-    # Save to text file
     with open("user_feedback.txt", "a", encoding="utf-8") as f:
         f.write(f"{datetime.now()} | {username} | {message}\n")
 
