@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from database import db, init_app, User, Search
 from werkzeug.security import generate_password_hash, check_password_hash
 import numpy as np
-from datetime import datetime
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
@@ -70,12 +69,10 @@ def dashboard():
         return redirect(url_for("login"))
     return render_template("index.html", username=session["username"])
 
-# ---------------- SAFE CSV LOAD ----------------
+# ---------------- CSV DATA LOAD ----------------
 def safe_download(stock):
     try:
         df = pd.read_csv("stock_data.csv")
-
-        # Filter selected stock
         df = df[df["Symbol"] == stock]
 
         if df.empty:
@@ -121,7 +118,6 @@ def predict():
         prediction = model.predict(X_test, verbose=0)
         predicted_price = float(scaler.inverse_transform(prediction)[0][0])
 
-        # Save to DB
         new_search = Search(
             username=session["username"],
             stock=stock,
